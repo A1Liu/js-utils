@@ -1,0 +1,42 @@
+name: Publish to NPM Registry
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    environment: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          cache-dependency-path: pnpm-lock.yaml
+          cache: pnpm
+
+      - name: Install packages
+        shell: bash
+        run: |
+          pnpm install
+
+          if ! test -z "`git diff --stat`"; then
+            echo "Changes were found; please run 'pnpm install' and commit the output."
+            echo
+            git diff --name-only
+            exit 1
+          fi
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Publish package on NPM 📦
+        run: pnpm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+

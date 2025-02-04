@@ -1,10 +1,9 @@
-import { Future, Mutex, timePromise } from "./async";
+import { timePromise } from "./async";
 import { PersistStorage, StorageValue } from "zustand/middleware";
 import { z } from "zod";
-import { get, set, del } from "idb-keyval";
-import type { DebounceSettings } from "lodash";
-import debounce from "lodash/debounce";
+import { Debouncer } from "./contention";
 import { getOrCompute } from "./util";
+import { IDBPDatabase, openDB } from "idb";
 
 export function zustandJsonReviver(_key: string, value: unknown): unknown {
   try {
@@ -66,63 +65,21 @@ export function zustandJsonReplacer(
   return value;
 }
 
-// TODO: test this code please
-class Debouncer {
-  private currentFut = new Future<true>();
-  private isRunning = false;
-
-  private readonly debouncedFunc: (
-    r: () => Promise<void>,
-  ) => Promise<void> | undefined;
-
-  constructor(waitTime?: number, opts?: DebounceSettings) {
-    const leading = opts?.leading;
-    const trailing = opts?.trailing ?? true;
-
-    this.debouncedFunc = debounce(
-      async (r) => {
-        // TODO: timeouts
-        if (this.isRunning) {
-          return; // If we're already running, we shouldn't run again.
-        }
-
-        if (leading && this.currentFut.value) {
-          this.currentFut = new Future();
-        }
-
-        try {
-          await r();
-        } catch (error) {
-          console.error(`Failure ${String(error)}`);
-        } finally {
-          this.isRunning = false;
-          this.currentFut.resolve(true);
-
-          if (trailing) {
-            this.currentFut = new Future();
-          }
-        }
-      },
-      waitTime,
-      opts,
-    );
-  }
-
-  async run(r: () => Promise<void>) {
-    this.debouncedFunc(r);
-
-    return await this.currentFut.promise;
-  }
-}
-
 // operations should be linearized
 // set operations and remove operations should be debounced
-class IdbStorage implements PersistStorage<unknown> {
-  private readonly mutexes = new Map<string, Mutex>();
+export class IdbZustandStorage implements PersistStorage<unknown> {
+  private readonly db: Promise<IDBPDatabase<unknown>>;
   private readonly debouncers = new Map<string, Debouncer>();
 
-  mutex(name: string) {
-    return getOrCompute(this.mutexes, name, () => new Mutex());
+  constructor(
+    readonly databaseName = "idb-storage",
+    readonly storeName = "object-store",
+  ) {
+    this.db = openDB(databaseName, 1, {
+      upgrade(db) {
+        db.createObjectStore(databaseName);
+      },
+    });
   }
 
   debouncer(name: string) {
@@ -130,50 +87,49 @@ class IdbStorage implements PersistStorage<unknown> {
       this.debouncers,
       name,
       () =>
-        new Debouncer(500, {
+        new Debouncer(2_500, {
           leading: true,
           trailing: true,
           maxWait: 5_000,
         }),
     );
-    return {
-      async debounce(r: () => Promise<void>) {
-        await debouncer.run(r);
-      },
-    };
+    return debouncer;
   }
 
   async getItem(name: string): Promise<StorageValue<unknown> | null> {
-    return this.mutex(name).run(async () => {
-      const { result, duration } = await timePromise(() => get(name));
-      console.log(
-        `Read ${name}${!result.success ? " (failed)" : ""} in ${duration}ms`,
-      );
-      if (!result.success) throw result.error;
+    const db = await this.db;
+    const { result, duration } = await timePromise(() =>
+      db.get(this.storeName, name),
+    );
+    console.log(
+      `Read ${name}${!result.success ? " (failed)" : ""} in ${duration}ms`,
+    );
+    if (!result.success) throw result.error;
 
-      return result.value;
-    });
+    return result.value;
   }
 
   async setItem(name: string, value: StorageValue<unknown>): Promise<void> {
-    await this.debouncer(name).debounce(() => {
-      return this.mutex(name).run(async () => {
-        const { result, duration } = await timePromise(() => set(name, value));
-        console.log(
-          `Wrote ${name}${!result.success ? " (failed)" : ""} in ${duration}ms`,
-        );
-      });
+    this.debouncer(name).run(async () => {
+      const db = await this.db;
+      const { result, duration } = await timePromise(() =>
+        db.put(this.storeName, value, name),
+      );
+      console.log(
+        `Wrote ${name}${!result.success ? " (failed)" : ""} in ${duration}ms`,
+      );
     });
   }
 
   async removeItem(name: string): Promise<void> {
-    return this.mutex(name).run(async () => {
-      const { result, duration } = await timePromise(() => del(name));
-      console.log(
-        `Deleted ${name}${!result.success ? " (failed)" : ""} in ${duration}ms`,
-      );
-    });
+    const db = await this.db;
+    const { result, duration } = await timePromise(() =>
+      db.delete(this.storeName, name),
+    );
+    console.log(
+      `Deleted ${name}${!result.success ? " (failed)" : ""} in ${duration}ms`,
+    );
   }
 }
 
-export const ZustandIdbStorage: PersistStorage<unknown> = new IdbStorage();
+// export const ZustandIdbStorage: PersistStorage<unknown> = new IdbStorage();

@@ -1,3 +1,4 @@
+// TODO: Why did I pick the name "unwrapped promise" ?
 export interface UnwrappedPromise<T> {
   value?: T;
   promise: Promise<T>;
@@ -7,21 +8,33 @@ export class Future<T> {
   readonly promise: Promise<T>;
   readonly resolve: (t: T) => unknown;
   readonly reject: (err: unknown) => unknown;
+  private _status: "success" | "pending" | "error" = "pending";
   private _valueSlot: T | undefined;
 
   constructor() {
-    let resolve: (t: T) => unknown = () => {};
-    let reject: (err: unknown) => unknown = () => {};
-    const promise = new Promise<T>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-
-    promise.then((value) => (this._valueSlot = value));
+    const { promise, resolve, reject } = Promise.withResolvers<T>();
 
     this.promise = promise;
-    this.resolve = resolve;
-    this.reject = reject;
+    this.resolve = (t) => {
+      if (this._status !== "pending") return;
+
+      resolve(t);
+      this._valueSlot = t;
+      this._status = "success";
+    };
+    this.reject = (e) => {
+      if (this._status !== "pending") return;
+
+      reject(e);
+      this._status = "error";
+    };
+  }
+
+  static resolve<K>(k: K): Future<K> {
+    const f = new Future<K>();
+    f.resolve(k);
+
+    return f;
   }
 
   static unwrapPromise<K>(promise: Promise<K>): UnwrappedPromise<K> {
@@ -35,6 +48,10 @@ export class Future<T> {
         return _valueSlot;
       },
     };
+  }
+
+  get done(): boolean {
+    return this._status !== "pending";
   }
 
   get value(): T | undefined {
@@ -108,44 +125,6 @@ export async function all<T extends Record<string, Promise<unknown>>>(
   return results;
 }
 
-// TODO: test this code please
-export class Mutex {
-  private isRunning = false;
-  private readonly listeners: (() => unknown)[] = [];
-
-  async run<T>(run: () => Promise<T>): Promise<T> {
-    const this_ = this;
-
-    const fut = new Future<T>();
-
-    async function mutexRunner() {
-      try {
-        const returnValue = await run();
-        fut.resolve(returnValue);
-      } catch (error) {
-        fut.reject(error);
-        console.error(`Error in storage`, error);
-      } finally {
-        const nextListener = this_.listeners.shift();
-        if (!nextListener) {
-          this_.isRunning = false;
-          return;
-        }
-
-        nextListener();
-      }
-    }
-    if (!this_.isRunning) {
-      this_.isRunning = true;
-      mutexRunner();
-    } else {
-      this_.listeners.push(mutexRunner);
-    }
-
-    return fut.promise;
-  }
-}
-
 type Result<T> =
   | { success: true; value: T }
   | { success: false; error: unknown };
@@ -169,6 +148,5 @@ export default {
   Future,
   all,
   allSettled,
-  Mutex,
   timePromise,
 };

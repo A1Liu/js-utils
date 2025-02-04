@@ -107,3 +107,9 @@ export async function all<T extends Record<string, Promise<unknown>>>(
 
   return results;
 }
+
+export default {
+  Future,
+  all,
+  allSettled,
+};

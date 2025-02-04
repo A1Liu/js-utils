@@ -108,8 +108,67 @@ export async function all<T extends Record<string, Promise<unknown>>>(
   return results;
 }
 
+// TODO: test this code please
+export class Mutex {
+  private isRunning = false;
+  private readonly listeners: (() => unknown)[] = [];
+
+  async run<T>(run: () => Promise<T>): Promise<T> {
+    const this_ = this;
+
+    const fut = new Future<T>();
+
+    async function mutexRunner() {
+      try {
+        const returnValue = await run();
+        fut.resolve(returnValue);
+      } catch (error) {
+        fut.reject(error);
+        console.error(`Error in storage`, error);
+      } finally {
+        const nextListener = this_.listeners.shift();
+        if (!nextListener) {
+          this_.isRunning = false;
+          return;
+        }
+
+        nextListener();
+      }
+    }
+    if (!this_.isRunning) {
+      this_.isRunning = true;
+      mutexRunner();
+    } else {
+      this_.listeners.push(mutexRunner);
+    }
+
+    return fut.promise;
+  }
+}
+
+type Result<T> =
+  | { success: true; value: T }
+  | { success: false; error: unknown };
+
+export async function timePromise<T>(t: () => Promise<T>): Promise<{
+  duration: number;
+  result: Result<T>;
+}> {
+  const begin = performance.now();
+  try {
+    const value = await t();
+    const end = performance.now();
+    return { duration: end - begin, result: { success: true, value } };
+  } catch (error) {
+    const end = performance.now();
+    return { duration: end - begin, result: { success: false, error } };
+  }
+}
+
 export default {
   Future,
   all,
   allSettled,
+  Mutex,
+  timePromise,
 };

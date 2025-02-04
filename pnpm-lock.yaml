@@ -14,6 +14,9 @@ importers:
       idb:
         specifier: ^8.0.0
         version: 8.0.2
+      idb-keyval:
+        specifier: ^6.2.1
+        version: 6.2.1
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
@@ -23,6 +26,9 @@ importers:
       zod:
         specifier: ^3.22.4
         version: 3.24.1
+      zustand:
+        specifier: ^5.0.3
+        version: 5.0.3
     devDependencies:
       '@types/lodash':
         specifier: ^4.17.0
@@ -48,6 +54,9 @@ packages:
   fast-json-stable-stringify@2.1.0:
     resolution: {integrity: sha512-lhd/wF+Lk98HZoTCtlVraHtfh5XYijIjalXck7saUtuanSDyLMxnHhSXEDJqHxD7msR8D0uCmqlkwjCV8xvwHw==}
 
+  idb-keyval@6.2.1:
+    resolution: {integrity: sha512-8Sb3veuYCyrZL+VBt9LJfZjLUPWVvqn8tG28VqYNFCo43KHcKuq+b4EiXGeuaLAQWL2YmyDgMp2aSpH9JHsEQg==}
+
   idb@8.0.2:
     resolution: {integrity: sha512-CX70rYhx7GDDQzwwQMDwF6kDRQi5vVs6khHUumDrMecBylKkwvZ8HWvKV08AGb7VbpoGCWUQ4aHzNDgoUiOIUg==}
 
@@ -71,6 +80,24 @@ packages:
   zod@3.24.1:
     resolution: {integrity: sha512-muH7gBL9sI1nciMZV67X5fTKKBLtwpZ5VBp1vsOQzj1MhrBZ4wlVCm3gedKZWLp0Oyel8sIGfeiz54Su+OVT+A==}
 
+  zustand@5.0.3:
+    resolution: {integrity: sha512-14fwWQtU3pH4dE0dOpdMiWjddcH+QzKIgk1cl8epwSE7yag43k/AD/m4L6+K7DytAOr9gGBe3/EXj9g7cdostg==}
+    engines: {node: '>=12.20.0'}
+    peerDependencies:
+      '@types/react': '>=18.0.0'
+      immer: '>=9.0.6'
+      react: '>=18.0.0'
+      use-sync-external-store: '>=1.2.0'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
+      use-sync-external-store:
+        optional: true
+
 snapshots:
 
   '@types/lodash@4.17.15': {}
@@ -78,6 +105,8 @@ snapshots:
   '@types/uuid@9.0.8': {}
 
   fast-json-stable-stringify@2.1.0: {}
+
+  idb-keyval@6.2.1: {}
 
   idb@8.0.2: {}
 
@@ -90,3 +119,5 @@ snapshots:
   uuid@9.0.1: {}
 
   zod@3.24.1: {}
+
+  zustand@5.0.3: {}

@@ -7,6 +7,9 @@
     "ts-check": "tsc",
     "build": "tsc"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": "./dist/index.js",
     "./util": "./dist/util.js",

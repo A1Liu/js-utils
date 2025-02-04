@@ -38,7 +38,6 @@ jobs:
 
       - name: Publish package on NPM 📦
         run: |
-          npm unpublish @a1liu/js-utils@0.1.0
           pnpm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}

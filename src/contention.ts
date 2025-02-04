@@ -5,6 +5,10 @@ import debounce from "lodash/debounce";
 // Is Effect.ts the right thing to use here? It's interesting,
 // but also a lot to deal with.
 
+// Deduplicates multipe calls to a long-running task. If trailing is true,
+// subsequent calls while the task is running will be deduplicated into a single
+// task, which will execute the most recent call. If trailing is false, then
+// subsequent calls will be be destroyed.
 export class Dedup<T> {
   private currentFut?: Future<T>;
   private nextRun?: () => T;
@@ -17,22 +21,29 @@ export class Dedup<T> {
     if (this.nextFut) {
       return this.nextFut.promise;
     }
-    this.nextFut = new Future<T>();
+    const newFut = new Future<T>();
+    this.nextFut = newFut;
 
     if (this.currentFut?.done === false) {
       await this.currentFut.promise;
     }
 
-    this.currentFut = this.nextFut;
-    this.nextFut = undefined;
+    if (this.trailing) {
+      this.currentFut = this.nextFut;
+      this.nextFut = undefined;
+    }
 
     try {
       const val = await this.nextRun();
-      this.currentFut.resolve(val);
+      newFut.resolve(val);
       return val;
     } catch (e) {
-      this.currentFut.reject(e);
+      newFut.reject(e);
       throw e;
+    } finally {
+      if (!this.trailing) {
+        this.nextFut = undefined;
+      }
     }
   }
 }

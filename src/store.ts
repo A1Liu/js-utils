@@ -65,6 +65,43 @@ export function zustandJsonReplacer(
   return value;
 }
 
+
+type UpdateEffect<T> =
+  | {
+    id: string;
+    kind: "upsert"
+    data: Partial<T>;
+    collisionBehavior: "fail" | "update" | "nothing"
+  }
+  | {
+    id: string;
+    kind : "delete";
+    query: void | "TODO"
+  }
+  | {
+  }
+
+type StorageType<T> = {
+  effects: UpdateEffect<T>[];
+
+  actions: {
+  };
+}
+
+export class IdbZustandStorage<T> implements PersistStorage<StorageType<T>> {
+}
+
+// TODO:
+// Some thoughts on when you need a large cache of data and don't want it in
+// memory:
+// - Use IDB
+// - Maybe build an adapter which updates a larger IDB store for a single record?
+//   - The adapter knows which record the zustand state is looking at
+//   - When the record changes, the state changes
+//   - Vice-versa, when the state changes the record in IDB changes
+//   - ^ Maybe it's not worth it to use zustand for this?
+
+
 // operations should be linearized
 // set operations and remove operations should be debounced
 export class IdbZustandStorage implements PersistStorage<unknown> {
@@ -129,6 +166,30 @@ export class IdbZustandStorage implements PersistStorage<unknown> {
     console.log(
       `Deleted ${name}${!result.success ? " (failed)" : ""} in ${duration}ms`,
     );
+  }
+
+  async* readDbSnapshot(): AsyncIterator<[string, unknown], any, any> {
+    const db = await this.db;
+    const tx = db.transaction(this.storeName, "readonly");
+    const store = tx.objectStore(this.storeName);
+
+    for await (const cursorValue of store.iterate(null)) {
+      yield [cursorValue.key, cursorValue.value];
+    }
+
+    tx.close();
+  }
+
+  async restoreDbFromSnapshot(values: readonly (readonly [string, unknown])[]) {
+    const db = await this.db;
+    const tx = db.transaction(this.storeName, "readwrite");
+    const store = tx.objectStore(this.storeName);
+
+    await Promise.allSettled(
+      pairs.map(([key, value]) => store.put(value, key)),
+    );
+
+    await tx.commit();
   }
 }
 

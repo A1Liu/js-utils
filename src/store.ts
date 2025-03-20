@@ -66,31 +66,6 @@ export function zustandJsonReplacer(
 }
 
 
-type UpdateEffect<T> =
-  | {
-    id: string;
-    kind: "upsert"
-    data: Partial<T>;
-    collisionBehavior: "fail" | "update" | "nothing"
-  }
-  | {
-    id: string;
-    kind : "delete";
-    query: void | "TODO"
-  }
-  | {
-  }
-
-type StorageType<T> = {
-  effects: UpdateEffect<T>[];
-
-  actions: {
-  };
-}
-
-export class IdbZustandStorage<T> implements PersistStorage<StorageType<T>> {
-}
-
 // TODO:
 // Some thoughts on when you need a large cache of data and don't want it in
 // memory:
@@ -174,10 +149,10 @@ export class IdbZustandStorage implements PersistStorage<unknown> {
     const store = tx.objectStore(this.storeName);
 
     for await (const cursorValue of store.iterate(null)) {
-      yield [cursorValue.key, cursorValue.value];
+      yield [cursorValue.key as unknown as string, cursorValue.value];
     }
 
-    tx.close();
+    tx.commit();
   }
 
   async restoreDbFromSnapshot(values: readonly (readonly [string, unknown])[]) {
@@ -186,10 +161,10 @@ export class IdbZustandStorage implements PersistStorage<unknown> {
     const store = tx.objectStore(this.storeName);
 
     await Promise.allSettled(
-      pairs.map(([key, value]) => store.put(value, key)),
+      values.map(([key, value]) => store.put(value, key)),
     );
 
-    await tx.commit();
+    tx.commit();
   }
 }
 

@@ -5,16 +5,19 @@
   "scripts": {
     "format": "prettier --write .",
     "ts-check": "tsc",
-    "build": "tsc"
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "publishConfig": {
     "access": "public"
   },
   "exports": {
-    ".": "./dist/index.js",
     "./util": "./dist/util.js",
     "./async": "./dist/async.js",
-    "./store": "./dist/store.js"
+    "./zustand/idb-store": "./dist/zustand/idb-store.js",
+    "./form": "./dist/form/index.js",
+    ".": "./dist/index.js"
   },
   "typesVersions": {
     "*": {
@@ -24,8 +27,11 @@
       "util": [
         "dist/util.d.ts"
       ],
-      "store": [
-        "dist/store.d.ts"
+      "form": [
+        "dist/form/index.d.ts"
+      ],
+      "zustand/idb-store": [
+        "dist/zustand/idb-store.d.ts"
       ]
     }
   },
@@ -42,7 +48,9 @@
     "@types/lodash": "^4.17.0",
     "@types/uuid": "^9.0.2",
     "prettier": "^3.4.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8"
   },
   "prettier": {
     "trailingComma": "all",

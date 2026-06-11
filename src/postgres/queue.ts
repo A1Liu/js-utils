@@ -2,14 +2,43 @@ import pg from "pg";
 import sql, { empty, raw } from "sql-template-tag";
 
 /*
+The queue table's name is configurable, but its columns are fixed. The indexes
+match claim()'s access pattern: filter on status (and optionally scope), then
+order by entered_queue_at.
 
-id
-scope
-status
+Example Prisma model:
 
-index on:
- - status, updatedAt
- - scope, status, updatedAt
+  model QueueItem {
+    id             String   @id @default(uuid()) @db.Uuid
+    scope          String
+    data           Json
+    status         String   @default("queued")
+    enteredQueueAt DateTime @default(now()) @map("entered_queue_at") @db.Timestamptz(6)
+    updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+    attemptCount   Int      @default(0) @map("attempt_count")
+
+    @@index([status, enteredQueueAt])
+    @@index([scope, status, enteredQueueAt])
+    @@map("queue_items")
+  }
+
+Example Postgres migration:
+
+  CREATE TABLE queue_items (
+    id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    scope            text        NOT NULL,
+    data             jsonb       NOT NULL,
+    status           text        NOT NULL DEFAULT 'queued',
+    entered_queue_at timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+    attempt_count    integer     NOT NULL DEFAULT 0
+  );
+
+  CREATE INDEX queue_items_status_entered_queue_at_idx
+    ON queue_items (status, entered_queue_at);
+
+  CREATE INDEX queue_items_scope_status_entered_queue_at_idx
+    ON queue_items (scope, status, entered_queue_at);
 */
 
 export enum QueueStatus {
@@ -169,7 +198,7 @@ export class PgQueue<T = unknown> {
     const { status } = update;
     const requeue =
       status.value === QueueStatus.Queued
-        ? sql`, entered_queue_at = ${status.requeueAt},`
+        ? sql`, entered_queue_at = ${status.requeueAt}`
         : empty;
     const newData =
       update.newState === undefined

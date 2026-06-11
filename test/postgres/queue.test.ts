@@ -1,10 +1,11 @@
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  createMigration,
   PgQueue,
   QueueStatus,
   type QueueStateUpdate,
-} from "../../src/postgres/queue.js";
+} from "../../src/postgres/queue";
 
 type Payload = { step: string };
 
@@ -23,17 +24,7 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
 
   beforeAll(async () => {
     pool = new pg.Pool({ connectionString: databaseUrl });
-    await pool.query(`
-      CREATE TABLE ${TABLE} (
-        id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-        scope            text        NOT NULL,
-        data             jsonb       NOT NULL,
-        status           text        NOT NULL DEFAULT 'queued',
-        entered_queue_at timestamptz NOT NULL DEFAULT now(),
-        updated_at       timestamptz NOT NULL DEFAULT now(),
-        attempt_count    integer     NOT NULL DEFAULT 0
-      )
-    `);
+    await pool.query(createMigration(TABLE));
     queue = new PgQueue<Payload>({ pool, table: TABLE });
   });
 
@@ -129,7 +120,10 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
     const created = await queue.addItem("scope-a", { step: "start" });
 
     await queue.processNext(async () => ({
-      status: { value: QueueStatus.Queued, requeueAt: new Date(Date.now() - 1000) },
+      status: {
+        value: QueueStatus.Queued,
+        requeueAt: new Date(Date.now() - 1000),
+      },
     }));
 
     const claimed = await queue.processNext(async () => done);
@@ -162,7 +156,11 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
   });
 
   it("does not claim an item deferred via enqueueAt", async () => {
-    await queue.addItem("scope-a", { step: "later" }, new Date(Date.now() + 60_000));
+    await queue.addItem(
+      "scope-a",
+      { step: "later" },
+      new Date(Date.now() + 60_000),
+    );
     expect(await queue.processNext(async () => done)).toBeNull();
   });
 
@@ -172,7 +170,11 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
       { step: "old" },
       new Date(Date.now() - 120_000),
     );
-    await queue.addItem("scope-a", { step: "new" }, new Date(Date.now() - 60_000));
+    await queue.addItem(
+      "scope-a",
+      { step: "new" },
+      new Date(Date.now() - 60_000),
+    );
 
     const claimed = await queue.processNext(async () => done);
     expect(claimed?.id).toBe(older.id);

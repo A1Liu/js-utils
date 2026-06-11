@@ -77,6 +77,20 @@ export type PgQueueConfig = {
   table: string;
 };
 
+export function createMigration(table: string) {
+  return `
+      CREATE TABLE ${table} (
+        id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+        scope            text        NOT NULL,
+        data             jsonb       NOT NULL,
+        status           text        NOT NULL DEFAULT 'queued',
+        entered_queue_at timestamptz NOT NULL DEFAULT now(),
+        updated_at       timestamptz NOT NULL DEFAULT now(),
+        attempt_count    integer     NOT NULL DEFAULT 0
+      )
+    `
+}
+
 /**
  * A Postgres-backed work queue using `SELECT ... FOR UPDATE SKIP LOCKED` for
  * exclusive, concurrency-safe claims.

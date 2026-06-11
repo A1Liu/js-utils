@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { Future, all, allSettled, timePromise } from "./async.js";
+import { Future, all, allSettled, timePromise } from "../src//async.js";
 
 describe("Future", () => {
   it("starts pending with no value", () => {

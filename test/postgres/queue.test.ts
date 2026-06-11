@@ -4,7 +4,7 @@ import {
   PgQueue,
   QueueStatus,
   type QueueStateUpdate,
-} from "../src/postgres/queue.js";
+} from "../../src/postgres/queue.js";
 
 type Payload = { step: string };
 

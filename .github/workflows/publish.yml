@@ -33,6 +33,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
           registry-url: 'https://registry.npmjs.org'
           cache: pnpm
+          version: 24
 
       - name: Install packages
         shell: bash

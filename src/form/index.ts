@@ -10,11 +10,12 @@
 
 // In theory we can support loops/etc, maybe forms don't have to be a DAG.
 
+/*
 const api: any = {};
 
 function exampleCode() {
   const FormPage = api.form({
-    fields: 
+    fields:  ''
   });
 
 
@@ -23,3 +24,4 @@ function exampleCode() {
 
     }
 }
+*/

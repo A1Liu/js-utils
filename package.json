@@ -2,6 +2,7 @@
   "name": "@a1liu/js-utils",
   "version": "0.0.2",
   "type": "module",
+  "repository": "https://github.com/A1Liu/js-utils",
   "scripts": {
     "format": "prettier --write .",
     "ts-check": "tsc && tsc -p tsconfig.test.json",

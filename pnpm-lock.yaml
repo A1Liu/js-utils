@@ -20,6 +20,9 @@ importers:
       lodash:
         specifier: ^4.17.21
         version: 4.18.1
+      sql-template-tag:
+        specifier: ^5.0.0
+        version: 5.2.1
       uuid:
         specifier: ^14.0.0
         version: 14.0.0
@@ -51,9 +54,6 @@ importers:
       rolldown:
         specifier: 1.0.3
         version: 1.0.3
-      sql-template-tag:
-        specifier: ^5.2.1
-        version: 5.2.1
       typescript:
         specifier: ^5.7.3
         version: 5.9.3

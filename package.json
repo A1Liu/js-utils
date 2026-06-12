@@ -44,20 +44,17 @@
     "fast-json-stable-stringify": "^2.1.0",
     "idb": "^8.0.0",
     "idb-keyval": "^6.2.1",
+    "sql-template-tag": "^5.0.0",
     "lodash": "^4.17.21",
     "uuid": "^14.0.0",
     "zod": "^3.22.4",
     "zustand": "^5.0.3"
   },
   "peerDependencies": {
-    "pg": "^8.0.0",
-    "sql-template-tag": "^5.0.0"
+    "pg": "^8.0.0"
   },
   "peerDependenciesMeta": {
     "pg": {
-      "optional": true
-    },
-    "sql-template-tag": {
       "optional": true
     }
   },
@@ -69,7 +66,6 @@
     "pg": "^8.13.0",
     "prettier": "^3.4.2",
     "rolldown": "1.0.3",
-    "sql-template-tag": "^5.2.1",
     "typescript": "^5.7.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"

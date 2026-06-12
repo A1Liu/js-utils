@@ -59,8 +59,9 @@ jobs:
       - name: Build
         run: pnpm run build
 
+
       - name: Publish package on NPM 📦
-        run: pnpm publish
+        run: NODE_AUTH_TOKEN="" pnpm publish --access public
 
       - name: Push version commit
         run: git push origin HEAD:${{ github.ref_name }}

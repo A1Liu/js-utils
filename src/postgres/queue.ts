@@ -3,10 +3,10 @@ import sql, { empty, raw } from "sql-template-tag";
 
 /*
 The queue table's name is configurable, but its columns are fixed. The indexes
-match claim()'s access pattern: filter on status (and optionally scope), then
+match claim()'s access pattern: filter on scope and status, then
 order by entered_queue_at.
 
-Example Prisma model:
+Prisma model:
 
   model QueueItem {
     id             String   @id @default(uuid()) @db.Uuid
@@ -22,13 +22,13 @@ Example Prisma model:
     @@map("queue_items")
   }
 
-Example Postgres migration:
+Postgres migration:
 
   CREATE TABLE queue_items (
     id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     scope            text        NOT NULL,
-    data             jsonb       NOT NULL,
     status           text        NOT NULL DEFAULT 'queued',
+    data             jsonb       NOT NULL,
     entered_queue_at timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
     attempt_count    integer     NOT NULL DEFAULT 0
@@ -39,6 +39,21 @@ Example Postgres migration:
 
   CREATE INDEX queue_items_scope_status_entered_queue_at_idx
     ON queue_items (scope, status, entered_queue_at);
+*/
+
+/*
+TODO: Add timeout logic. Figure out how to get automatic retry to happen when
+e.g. a process dies.
+
+Probably:
+- When pulling data, instead of setting status to "processing", push back the
+  timer (and maybe set UUID or hash?).
+- Then, when doing state update on completion, ensure attempt count (or maybe a hash
+  or smthn) is the same as it was when reading
+*/
+
+/*
+TODO: Add table name escaping
 */
 
 export enum QueueStatus {
@@ -75,6 +90,7 @@ export type PgQueueItem<T = unknown> = {
 export type PgQueueConfig = {
   pool: pg.Pool;
   table: string;
+  scope?: string;
 };
 
 export function createMigration(table: string) {
@@ -82,13 +98,13 @@ export function createMigration(table: string) {
       CREATE TABLE ${table} (
         id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
         scope            text        NOT NULL,
-        data             jsonb       NOT NULL,
         status           text        NOT NULL DEFAULT 'queued',
+        data             jsonb       NOT NULL,
         entered_queue_at timestamptz NOT NULL DEFAULT now(),
         updated_at       timestamptz NOT NULL DEFAULT now(),
         attempt_count    integer     NOT NULL DEFAULT 0
       )
-    `
+    `;
 }
 
 /**
@@ -102,10 +118,12 @@ export function createMigration(table: string) {
 export class PgQueue<T = unknown> {
   private readonly pool: pg.Pool;
   private readonly table: string;
+  private readonly scope: string;
 
   constructor(config: PgQueueConfig) {
     this.pool = config.pool;
     this.table = config.table;
+    this.scope = config.scope ?? "";
   }
 
   /**
@@ -113,18 +131,20 @@ export class PgQueue<T = unknown> {
    * table's default. Pass `enqueueAt` to defer the item until that time.
    */
   async addItem(
-    scope: string,
     data: T,
-    enqueueAt?: Date,
+    opts?: {
+      scope?: string;
+      enqueueAt?: Date;
+    },
   ): Promise<PgQueueItem<T>> {
     const { rows } = await this.pool.query<PgQueueItem<T>>(sql`
       INSERT INTO ${raw(this.table)}
         (scope, data, status, entered_queue_at, updated_at, attempt_count)
       VALUES (
-        ${scope},
+        ${opts?.scope ?? this.scope},
         ${JSON.stringify(data)},
         ${QueueStatus.Queued},
-        COALESCE(${enqueueAt ?? null}, now()),
+        COALESCE(${opts?.enqueueAt ?? null}, now()),
         now(),
         0
       )
@@ -150,8 +170,11 @@ export class PgQueue<T = unknown> {
    */
   async processNext(
     handler: (item: PgQueueItem<T>) => Promise<QueueStateUpdate<T>>,
-    scope?: string,
+    opts?: {
+      scope?: string;
+    },
   ): Promise<PgQueueItem<T> | null> {
+    const { scope = this.scope } = opts ?? {};
     const item = await this.claim(scope);
     if (!item) return null;
 
@@ -168,16 +191,9 @@ export class PgQueue<T = unknown> {
   }
 
   /**
-   * Atomically claim the oldest due queued item. The `FOR UPDATE SKIP LOCKED`
-   * subquery picks one unlocked queued row ordered by `entered_queue_at`; the
-   * surrounding UPDATE flips it to PROCESSING in the same statement, so no two
-   * workers can grab the same row. `entered_queue_at <= now()` keeps
-   * backoff-deferred items from being picked up early.
+   * Atomically claim the oldest due queued item.
    */
-  private async claim(scope?: string): Promise<PgQueueItem<T> | null> {
-    const scopeFilter =
-      scope === undefined ? empty : sql` AND scope = ${scope}`;
-
+  private async claim(scope: string): Promise<PgQueueItem<T> | null> {
     const { rows } = await this.pool.query<PgQueueItem<T>>(sql`
       UPDATE ${raw(this.table)}
       SET status = ${QueueStatus.Processing},
@@ -188,7 +204,7 @@ export class PgQueue<T = unknown> {
         FROM ${raw(this.table)}
         WHERE status = ${QueueStatus.Queued}
           AND entered_queue_at <= now()
-          ${scopeFilter}
+          AND scope = ${scope}
         ORDER BY entered_queue_at ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1

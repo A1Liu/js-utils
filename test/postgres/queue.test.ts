@@ -51,7 +51,7 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
   }
 
   it("addItem inserts a queued item and returns it", async () => {
-    const item = await queue.addItem("scope-a", { step: "start" });
+    const item = await queue.addItem({ step: "start" }, { scope: "scope-a" });
 
     expect(item.id).toBeTruthy();
     expect(item.scope).toBe("scope-a");
@@ -67,7 +67,7 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
   });
 
   it("claims an item as PROCESSING and marks it DONE on success", async () => {
-    const created = await queue.addItem("scope-a", { step: "start" });
+    const created = await queue.addItem({ step: "start" });
 
     let seen: unknown;
     const claimed = await queue.processNext(async (item) => {
@@ -89,7 +89,7 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
   });
 
   it("marks the item FAILED when the handler throws", async () => {
-    const created = await queue.addItem("scope-a", { step: "start" });
+    const created = await queue.addItem({ step: "start" });
 
     const claimed = await queue.processNext(async () => {
       throw new Error("boom");
@@ -101,7 +101,7 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
   });
 
   it("re-queues at requeueAt and skips the item until it is due", async () => {
-    const created = await queue.addItem("scope-a", { step: "start" });
+    const created = await queue.addItem({ step: "start" });
     const requeueAt = new Date(Date.now() + 60_000);
 
     await queue.processNext(async () => ({
@@ -117,7 +117,7 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
   });
 
   it("claims a re-queued item again once it is due", async () => {
-    const created = await queue.addItem("scope-a", { step: "start" });
+    const created = await queue.addItem({ step: "start" });
 
     await queue.processNext(async () => ({
       status: {
@@ -132,7 +132,7 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
   });
 
   it("replaces the item's data when the handler returns newState", async () => {
-    const created = await queue.addItem("scope-a", { step: "start" });
+    const created = await queue.addItem({ step: "start" });
 
     await queue.processNext(async () => ({
       ...done,
@@ -145,35 +145,39 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
 
   it("only claims items in the given scope", async () => {
     // The scope-a item is older, so an unscoped claim would pick it first.
-    const inA = await queue.addItem("scope-a", { step: "a" });
-    const inB = await queue.addItem("scope-b", { step: "b" });
+    const inA = await queue.addItem({ step: "a" }, { scope: "scope-a" });
+    const inB = await queue.addItem({ step: "b" }, { scope: "scope-b" });
 
-    const claimed = await queue.processNext(async () => done, "scope-b");
+    const claimed = await queue.processNext(async () => done, {
+      scope: "scope-b",
+    });
     expect(claimed?.id).toBe(inB.id);
 
-    expect(await queue.processNext(async () => done, "scope-b")).toBeNull();
+    expect(
+      await queue.processNext(async () => done, { scope: "scope-b" }),
+    ).toBeNull();
     expect((await getRow(inA.id)).status).toBe(QueueStatus.Queued);
   });
 
   it("does not claim an item deferred via enqueueAt", async () => {
     await queue.addItem(
-      "scope-a",
       { step: "later" },
-      new Date(Date.now() + 60_000),
+      {
+        scope: "scope-a",
+        enqueueAt: new Date(Date.now() + 60_000),
+      },
     );
     expect(await queue.processNext(async () => done)).toBeNull();
   });
 
   it("claims the oldest due item first", async () => {
     const older = await queue.addItem(
-      "scope-a",
       { step: "old" },
-      new Date(Date.now() - 120_000),
+      { enqueueAt: new Date(Date.now() - 120_000) },
     );
     await queue.addItem(
-      "scope-a",
       { step: "new" },
-      new Date(Date.now() - 60_000),
+      { enqueueAt: new Date(Date.now() - 60_000) },
     );
 
     const claimed = await queue.processNext(async () => done);
@@ -181,8 +185,8 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
   });
 
   it("never hands the same item to two concurrent workers", async () => {
-    await queue.addItem("scope-a", { step: "one" });
-    await queue.addItem("scope-a", { step: "two" });
+    await queue.addItem({ step: "one" });
+    await queue.addItem({ step: "two" });
 
     const slowDone = async () => {
       await new Promise((resolve) => setTimeout(resolve, 100));

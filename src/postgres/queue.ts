@@ -9,7 +9,7 @@ order by entered_queue_at.
 Prisma model:
 
   model QueueItem {
-    id             String   @id @default(uuid()) @db.Uuid
+    id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
     scope          String
     data           Json
     status         String   @default("queued")

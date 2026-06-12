@@ -14,12 +14,30 @@
     "access": "public"
   },
   "exports": {
-    "./util": "./dist/util.js",
-    "./async": "./dist/async.js",
-    "./zustand/idb-store": "./dist/zustand/idb-store.js",
-    "./form": "./dist/form/index.js",
-    "./postgres/queue": "./dist/postgres/queue.js",
-    ".": "./dist/index.js"
+    "./util": {
+      "types": "./dist/util.d.ts",
+      "import": "./dist/util.js"
+    },
+    "./async": {
+      "types": "./dist/async.d.ts",
+      "import": "./dist/async.js"
+    },
+    "./zustand/idb-store": {
+      "types": "./dist/zustand/idb-store.d.ts",
+      "import": "./dist/zustand/idb-store.js"
+    },
+    "./form": {
+      "types": "./dist/form/index.d.ts",
+      "import": "./dist/form/index.js"
+    },
+    "./postgres/queue": {
+      "types": "./dist/postgres/queue.d.ts",
+      "import": "./dist/postgres/queue.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "typesVersions": {
     "*": {

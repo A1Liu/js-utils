@@ -12,7 +12,7 @@ type Payload = { step: string };
 const databaseUrl = process.env.DATABASE_URL;
 
 // Unique per-run table name so concurrent or aborted runs don't collide.
-const TABLE = `utils_test.pg_queue_test_${Date.now().toString(36)}`;
+const TABLE = `pg_queue_test_${Date.now().toString(36)}`;
 
 const done: QueueStateUpdate<Payload> = {
   status: { value: QueueStatus.Done },

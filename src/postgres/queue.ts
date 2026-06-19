@@ -2,9 +2,7 @@ import pg from "pg";
 import sql, { empty, raw } from "sql-template-tag";
 
 /*
-The queue table's name is configurable, but its columns are fixed. The indexes
-match claim()'s access pattern: filter on scope and status, then
-order by entered_queue_at.
+Fixed-schema queue w/ JSON payload.
 
 Prisma model:
 
@@ -21,24 +19,6 @@ Prisma model:
     @@index([scope, status, enteredQueueAt])
     @@map("queue_items")
   }
-
-Postgres migration:
-
-  CREATE TABLE queue_items (
-    id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-    scope            text        NOT NULL,
-    status           text        NOT NULL DEFAULT 'queued',
-    data             jsonb       NOT NULL,
-    entered_queue_at timestamptz NOT NULL DEFAULT now(),
-    updated_at       timestamptz NOT NULL DEFAULT now(),
-    attempt_count    integer     NOT NULL DEFAULT 0
-  );
-
-  CREATE INDEX queue_items_status_entered_queue_at_idx
-    ON queue_items (status, entered_queue_at);
-
-  CREATE INDEX queue_items_scope_status_entered_queue_at_idx
-    ON queue_items (scope, status, entered_queue_at);
 */
 
 /*
@@ -74,8 +54,6 @@ export type QueueStateUpdate<T> = {
   newState?: T;
 };
 
-// Error which prevents queue retry — the item goes straight to FAILED.
-
 // A claimed item, normalized to fixed field names. `id` is the queue row's
 // primary key (used for status updates); `data` is its JSON payload.
 export type PgQueueItem<T = unknown> = {
@@ -91,20 +69,35 @@ export type PgQueueConfig = {
   pool: pg.Pool;
   table: string;
   scope?: string;
+  schema?: string;
 };
 
-export function createMigration(table: string) {
+/*
+ * Creates a migration string.
+ */
+export function createMigration(table: string, schema?: string) {
+  const escapedName = `${table.replace('"', '""')}`;
+  const escapedSchemaPrefix = schema?.trim()
+    ? `"${schema.trim().replace('"', '""')}"`
+    : "";
+
   return `
-      CREATE TABLE ${table} (
-        id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-        scope            text        NOT NULL,
-        status           text        NOT NULL DEFAULT 'queued',
-        data             jsonb       NOT NULL,
-        entered_queue_at timestamptz NOT NULL DEFAULT now(),
-        updated_at       timestamptz NOT NULL DEFAULT now(),
-        attempt_count    integer     NOT NULL DEFAULT 0
-      )
-    `;
+CREATE TABLE ${escapedSchemaPrefix}"${escapedName}" (
+  id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  scope            text        NOT NULL,
+  status           text        NOT NULL DEFAULT 'queued',
+  data             jsonb       NOT NULL,
+  entered_queue_at timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  attempt_count    integer     NOT NULL DEFAULT 0
+);
+
+CREATE INDEX "${table}_status_entered_queue_at_idx"
+  ON ${escapedSchemaPrefix}"${table}" (status, entered_queue_at);
+
+CREATE INDEX "${table}_scope_status_entered_queue_at_idx"
+  ON ${escapedSchemaPrefix}"${table}" (scope, status, entered_queue_at);
+`;
 }
 
 /**
@@ -118,11 +111,16 @@ export function createMigration(table: string) {
 export class PgQueue<T = unknown> {
   private readonly pool: pg.Pool;
   private readonly table: string;
+  private readonly tableRef: string;
   private readonly scope: string;
 
   constructor(config: PgQueueConfig) {
     this.pool = config.pool;
-    this.table = config.table;
+    this.table = `"${config.table.replace('"', '""')}"`;
+    const schemaPrefix = config.schema?.trim()
+      ? `"${config.schema.trim().replace('"', '""')}".`
+      : "";
+    this.tableRef = `${schemaPrefix}${this.table}`;
     this.scope = config.scope ?? "";
   }
 
@@ -138,7 +136,7 @@ export class PgQueue<T = unknown> {
     },
   ): Promise<PgQueueItem<T>> {
     const { rows } = await this.pool.query<PgQueueItem<T>>(sql`
-      INSERT INTO ${raw(this.table)}
+      INSERT INTO ${raw(this.tableRef)}
         (scope, data, status, entered_queue_at, updated_at, attempt_count)
       VALUES (
         ${opts?.scope ?? this.scope},
@@ -195,13 +193,13 @@ export class PgQueue<T = unknown> {
    */
   private async claim(scope: string): Promise<PgQueueItem<T> | null> {
     const { rows } = await this.pool.query<PgQueueItem<T>>(sql`
-      UPDATE ${raw(this.table)}
+      UPDATE ${raw(this.tableRef)}
       SET status = ${QueueStatus.Processing},
           attempt_count = attempt_count + 1,
           updated_at = now()
       WHERE id = (
         SELECT id
-        FROM ${raw(this.table)}
+        FROM ${raw(this.tableRef)}
         WHERE status = ${QueueStatus.Queued}
           AND entered_queue_at <= now()
           AND scope = ${scope}
@@ -236,7 +234,7 @@ export class PgQueue<T = unknown> {
         : sql`, data = ${JSON.stringify(update.newState)}`;
 
     await this.pool.query(sql`
-      UPDATE ${raw(this.table)}
+      UPDATE ${raw(this.tableRef)}
       SET status = ${status.value},
           updated_at = now()
           ${requeue}
@@ -245,3 +243,5 @@ export class PgQueue<T = unknown> {
     `);
   }
 }
+
+export function catchAndRetry() {}

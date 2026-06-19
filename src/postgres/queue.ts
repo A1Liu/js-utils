@@ -32,10 +32,6 @@ Probably:
   or smthn) is the same as it was when reading
 */
 
-/*
-TODO: Add table name escaping
-*/
-
 export enum QueueStatus {
   Queued = "queued",
   Processing = "processing",

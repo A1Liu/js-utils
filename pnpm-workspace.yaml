@@ -1,2 +1,2 @@
 minimumReleaseAgeExclude:
-  - '@rolldown/binding-darwin-arm64@1.1.1'
+  - "@rolldown/binding-darwin-arm64@1.1.1"

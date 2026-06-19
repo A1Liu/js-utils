@@ -65,7 +65,6 @@ export function zustandJsonReplacer(
   return value;
 }
 
-
 // TODO:
 // Some thoughts on when you need a large cache of data and don't want it in
 // memory:
@@ -75,7 +74,6 @@ export function zustandJsonReplacer(
 //   - When the record changes, the state changes
 //   - Vice-versa, when the state changes the record in IDB changes
 //   - ^ Maybe it's not worth it to use zustand for this?
-
 
 // operations should be linearized
 // set operations and remove operations should be debounced
@@ -143,7 +141,7 @@ export class IdbZustandStorage implements PersistStorage<unknown> {
     );
   }
 
-  async* readDbSnapshot(): AsyncIterator<[string, unknown], any, any> {
+  async *readDbSnapshot(): AsyncIterator<[string, unknown], any, any> {
     const db = await this.db;
     const tx = db.transaction(this.storeName, "readonly");
     const store = tx.objectStore(this.storeName);

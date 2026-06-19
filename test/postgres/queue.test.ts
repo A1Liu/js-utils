@@ -1,6 +1,7 @@
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  catchAndRetry,
   createMigration,
   PgQueue,
   QueueStatus,
@@ -98,6 +99,26 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
     expect(claimed?.id).toBe(created.id);
     const row = await getRow(created.id);
     expect(row.status).toBe(QueueStatus.Failed);
+  });
+
+  it("requeues the item when it throws and auto-retry is enabled", async () => {
+    const created = await queue.addItem({ step: "start" });
+
+    const claimed = await queue.processNext(
+      catchAndRetry(
+        async () => {
+          throw new Error("boom");
+        },
+        { baseBackoffMs: 5_000 },
+      ),
+    );
+
+    expect(claimed?.id).toBe(created.id);
+    const row = await getRow(created.id);
+    expect(row.status).toBe(QueueStatus.Queued);
+    expect(row.enteredQueueAt.getTime()).toBeGreaterThanOrEqual(
+      new Date().getTime(),
+    );
   });
 
   it("re-queues at requeueAt and skips the item until it is due", async () => {

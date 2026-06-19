@@ -31,7 +31,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           cache-dependency-path: pnpm-lock.yaml
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: "https://registry.npmjs.org"
           cache: pnpm
           node-version: 24
 
@@ -59,10 +59,8 @@ jobs:
       - name: Build
         run: pnpm run build
 
-
       - name: Publish package on NPM 📦
         run: NODE_AUTH_TOKEN="" pnpm publish --access public
 
       - name: Push version commit
         run: git push origin HEAD:${{ github.ref_name }}
-

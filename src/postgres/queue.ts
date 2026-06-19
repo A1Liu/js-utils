@@ -72,6 +72,10 @@ export type PgQueueConfig = {
   schema?: string;
 };
 
+export type PgQueueItemHandler<T> = (
+  item: PgQueueItem<T>,
+) => Promise<QueueStateUpdate<T>>;
+
 /*
  * Creates a migration string.
  */
@@ -167,7 +171,7 @@ export class PgQueue<T = unknown> {
    * queue is empty.
    */
   async processNext(
-    handler: (item: PgQueueItem<T>) => Promise<QueueStateUpdate<T>>,
+    handler: PgQueueItemHandler<T>,
     opts?: {
       scope?: string;
     },
@@ -244,4 +248,35 @@ export class PgQueue<T = unknown> {
   }
 }
 
-export function catchAndRetry() {}
+export function catchAndRetry<T>(
+  handler: PgQueueItemHandler<T>,
+  opts?: {
+    maxRetries?: number;
+    baseBackoffMs?: number;
+    backoffFactor?: number;
+  },
+): PgQueueItemHandler<T> {
+  const {
+    maxRetries = 10,
+    baseBackoffMs = 1000,
+    backoffFactor = 1.5,
+  } = opts ?? {};
+  return async (item: PgQueueItem<T>): Promise<QueueStateUpdate<T>> => {
+    try {
+      const update = await handler(item);
+      return update;
+    } catch (e) {
+      if (item.attemptCount > maxRetries) {
+        return { status: { value: QueueStatus.Failed } };
+      }
+
+      const delayMs = baseBackoffMs * backoffFactor ** (item.attemptCount - 1);
+      return {
+        status: {
+          value: QueueStatus.Queued,
+          requeueAt: new Date(new Date().getTime() + delayMs),
+        },
+      };
+    }
+  };
+}

@@ -78,7 +78,7 @@ export type PgQueueItemHandler<T> = (
 export function createMigration(table: string, schema?: string) {
   const escapedName = `${table.replace('"', '""')}`;
   const escapedSchemaPrefix = schema?.trim()
-    ? `"${schema.trim().replace('"', '""')}"`
+    ? `"${schema.trim().replace('"', '""')}".`
     : "";
 
   return `

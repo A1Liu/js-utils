@@ -78,11 +78,11 @@ export type PgQueueItemHandler<T> = (
 export function createMigration(table: string, schema?: string) {
   const escapedName = `${table.replace('"', '""')}`;
   const escapedSchemaPrefix = schema?.trim()
-    ? `"${schema.trim().replace('"', '""')}"`
+    ? `"${schema.trim().replace('"', '""')}".`
     : "";
 
   return `
-CREATE TABLE ${escapedSchemaPrefix}."${escapedName}" (
+CREATE TABLE ${escapedSchemaPrefix}"${escapedName}" (
   id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   scope            text        NOT NULL,
   status           text        NOT NULL DEFAULT 'queued',

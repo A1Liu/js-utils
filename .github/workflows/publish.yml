@@ -48,6 +48,7 @@ jobs:
           fi
 
       - name: Bump version
+        id: bump
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -56,11 +57,29 @@ jobs:
           git add package.json
           git commit -m "Release ${NEW_VERSION}"
 
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "branch=release/${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Build
         run: pnpm run build
 
       - name: Publish package on NPM 📦
         run: NODE_AUTH_TOKEN="" pnpm publish --access public
 
-      - name: Push version commit
-        run: git push origin HEAD:${{ github.ref_name }}
+      - name: Open version PR and auto-merge it
+        env:
+          # NOTE: need a PAT: a PR opened by GITHUB_TOKEN doesn't start
+          # the CI run that `main` requires, so auto-merge would never fire.
+          # GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          BRANCH: ${{ steps.bump.outputs.branch }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          git push origin "HEAD:refs/heads/${BRANCH}"
+
+          gh pr create \
+            --base "${{ github.ref_name }}" \
+            --head "${BRANCH}" \
+            --title "Release ${VERSION}" \
+            --body "Version bump for ${VERSION}, published from run ${{ github.run_id }}."
+
+          gh pr merge "${BRANCH}" --auto --squash

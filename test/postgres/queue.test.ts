@@ -87,7 +87,8 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
          status,
          data,
          entered_queue_at AS "enteredQueueAt",
-         attempt_count AS "attemptCount"
+         attempt_count AS "attemptCount",
+         error
        FROM ${TABLE} WHERE id = $1`,
       [id],
     );
@@ -113,6 +114,13 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
     expect(item.status).toBe(QueueStatus.Queued);
     expect(item.attemptCount).toBe(0);
     expect(item.enteredQueueAt).toBeInstanceOf(Date);
+  });
+
+  it("addItem leaves the new row's error null", async () => {
+    const item = await queue.addItem({ step: "start" });
+
+    expect(item.error).toBeNull();
+    expect((await getRow(item.id)).error).toBeNull();
   });
 
   it("processNext returns null when the queue is empty", async () => {
@@ -152,6 +160,7 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
     expect(claimed?.id).toBe(created.id);
     const row = await getRow(created.id);
     expect(row.status).toBe(QueueStatus.Failed);
+    expect(row.error).toBe("boom");
   });
 
   it("requeues the item when it throws and auto-retry is enabled", async () => {
@@ -169,9 +178,59 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
     expect(claimed?.id).toBe(created.id);
     const row = await getRow(created.id);
     expect(row.status).toBe(QueueStatus.Queued);
+    expect(row.error).toBe("boom");
     expect(row.enteredQueueAt.getTime()).toBeGreaterThanOrEqual(
       new Date().getTime(),
     );
+  });
+
+  it("records the error when catchAndRetry gives up on an item", async () => {
+    const created = await queue.addItem({ step: "start" });
+
+    // The first claim is attempt 1, which is already past the bound.
+    await queue.processNext(
+      catchAndRetry(
+        async () => {
+          throw new Error("boom");
+        },
+        { maxRetries: 0 },
+      ),
+    );
+
+    const row = await getRow(created.id);
+    expect(row.status).toBe(QueueStatus.Failed);
+    expect(row.error).toBe("boom");
+  });
+
+  it("clears the error of an attempt that failed when a later one works", async () => {
+    const created = await queue.addItem({ step: "start" });
+
+    await queue.processNext(
+      catchAndRetry(
+        async () => {
+          throw new Error("boom");
+        },
+        { baseBackoffMs: 0 },
+      ),
+    );
+    expect((await getRow(created.id)).error).toBe("boom");
+
+    const claimed = await queue.processNext(async () => done);
+
+    expect(claimed?.id).toBe(created.id);
+    const row = await getRow(created.id);
+    expect(row.status).toBe(QueueStatus.Done);
+    expect(row.error).toBeNull();
+  });
+
+  it("stringifies a thrown value that is not an Error", async () => {
+    const created = await queue.addItem({ step: "start" });
+
+    await queue.processNext(async () => {
+      throw "just a string";
+    });
+
+    expect((await getRow(created.id)).error).toBe("just a string");
   });
 
   it("re-queues at requeueAt and skips the item until it is due", async () => {
@@ -426,6 +485,19 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
       );
     });
 
+    it("writes the update's error, and reads it back as its message", async () => {
+      const created = await queue.addItem({ step: "start" });
+      await queue.claimNext();
+
+      const updated = await queue.updateItem(created.id, {
+        status: { value: QueueStatus.Failed },
+        error: new Error("422 unprocessable"),
+      });
+
+      expect(updated?.error).toBe("422 unprocessable");
+      expect((await getRow(created.id)).error).toBe("422 unprocessable");
+    });
+
     it("returns null when there is no such row", async () => {
       expect(await queue.updateItem(MISSING_ID, done)).toBeNull();
     });
@@ -480,7 +552,9 @@ describe.skipIf(!databaseUrl)("PgQueue", () => {
       // No handler can run on a payload that does not parse.
       expect(ran).toBe(false);
       expect(err).toBeInstanceOf(PgQueueDataError);
-      expect((await getRow(id)).status).toBe(QueueStatus.Failed);
+      const row = await getRow(id);
+      expect(row.status).toBe(QueueStatus.Failed);
+      expect(row.error).toContain("does not match the queue's schema");
     });
 
     it("keeps the rejection as the error's cause", async () => {
@@ -557,6 +631,7 @@ describe.skipIf(!databaseUrl)("createMigration applied", () => {
       ["entered_queue_at", "timestamp with time zone", "NO"],
       ["updated_at", "timestamp with time zone", "NO"],
       ["attempt_count", "integer", "NO"],
+      ["error", "text", "YES"],
     ]);
   });
 

@@ -50,10 +50,6 @@ export type QueueStateUpdate<T> = {
 
   newState?: T;
 
-  /**
-   * What went wrong, for an update that is an item going badly: a failure, or a
-   * re-queue after one.
-   */
   error?: Error;
 };
 
@@ -67,6 +63,7 @@ export type PgQueueItem<T = unknown> = {
   status: QueueStatus;
   enteredQueueAt: Date;
   attemptCount: number;
+
   /**
    * The message of the `error` its last update carried, or null
    */

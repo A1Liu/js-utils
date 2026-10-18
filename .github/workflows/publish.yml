@@ -68,9 +68,9 @@ jobs:
 
       - name: Open version PR and auto-merge it
         env:
-          # A PAT, not GITHUB_TOKEN: a PR opened by GITHUB_TOKEN doesn't start
+          # NOTE: need a PAT: a PR opened by GITHUB_TOKEN doesn't start
           # the CI run that `main` requires, so auto-merge would never fire.
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          # GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           BRANCH: ${{ steps.bump.outputs.branch }}
           VERSION: ${{ steps.bump.outputs.version }}
         run: |

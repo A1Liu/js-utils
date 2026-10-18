@@ -53,10 +53,6 @@ export type QueueStateUpdate<T> = {
   /**
    * What went wrong, for an update that is an item going badly: a failure, or a
    * re-queue after one.
-   *
-   * Its message is what the row's `error` column holds. Every settle writes
-   * that column, so leaving this out on an item that goes on to succeed is what
-   * clears the error an earlier attempt left there.
    */
   error?: Error;
 };

@@ -14,6 +14,7 @@ Prisma model:
     enteredQueueAt DateTime @default(now()) @map("entered_queue_at") @db.Timestamptz(6)
     updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
     attemptCount   Int      @default(0) @map("attempt_count")
+    error          String?
 
     @@index([status, enteredQueueAt])
     @@index([scope, status, enteredQueueAt])
@@ -48,6 +49,8 @@ export type QueueStateUpdate<T> = {
       };
 
   newState?: T;
+
+  error?: Error;
 };
 
 // A claimed item, normalized to fixed field names. `id` is the queue row's
@@ -60,6 +63,11 @@ export type PgQueueItem<T = unknown> = {
   status: QueueStatus;
   enteredQueueAt: Date;
   attemptCount: number;
+
+  /**
+   * The message of the `error` its last update carried, or null
+   */
+  error: string | null;
 };
 
 /**
@@ -109,6 +117,11 @@ export class PgQueueDataError extends Error {
   }
 }
 
+/** A caught value as the `Error` an update carries. */
+function asError(thrown: unknown): Error {
+  return thrown instanceof Error ? thrown : new Error(String(thrown));
+}
+
 /** Quotes an identifier, doubling any quote inside it. */
 function quoteIdent(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
@@ -134,7 +147,8 @@ CREATE TABLE ${ref} (
   data             jsonb       NOT NULL,
   entered_queue_at timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now(),
-  attempt_count    integer     NOT NULL DEFAULT 0
+  attempt_count    integer     NOT NULL DEFAULT 0,
+  error            text
 );
 
 CREATE INDEX ${quoteIdent(`${table}_status_entered_queue_at_idx`)}
@@ -154,7 +168,8 @@ const COLUMNS = raw(`
         data AS "data",
         status AS "status",
         entered_queue_at AS "enteredQueueAt",
-        attempt_count AS "attemptCount"`);
+        attempt_count AS "attemptCount",
+        error AS "error"`);
 
 // A row as Postgres hands it back: a `PgQueueItem` whose `data` has not been
 // through `dataSchema` yet.
@@ -166,7 +181,7 @@ type QueueRow = Omit<PgQueueItem, "data"> & { data: unknown };
  *
  * The table name is configurable, but the queue's columns are fixed:
  * `id`, `scope`, `data`, `status`, `entered_queue_at`, `updated_at`,
- * `attempt_count`.
+ * `attempt_count`, `error`.
  *
  * `processNext` is the whole job -- claim, run, settle -- for a caller that
  * wants one. A caller that needs the three apart, because what it does between
@@ -251,7 +266,10 @@ export class PgQueue<T = unknown> {
     } catch (err) {
       // It will not parse on a later attempt either, and an item left
       // PROCESSING is a claim nothing clears.
-      await this.writeUpdate(row.id, { status: { value: QueueStatus.Failed } });
+      await this.writeUpdate(row.id, {
+        status: { value: QueueStatus.Failed },
+        error: asError(err),
+      });
       throw err;
     }
   }
@@ -297,9 +315,10 @@ export class PgQueue<T = unknown> {
     try {
       const update = await handler({ ...item });
       await this.writeUpdate(item.id, update);
-    } catch {
+    } catch (err) {
       await this.writeUpdate(item.id, {
         status: { value: QueueStatus.Failed },
+        error: asError(err),
       });
     }
 
@@ -348,7 +367,8 @@ export class PgQueue<T = unknown> {
     const rows = await this.query(sql`
       UPDATE ${this.ref}
       SET status = ${status.value},
-          updated_at = now()
+          updated_at = now(),
+          error = ${update.error?.message ?? null}
           ${requeue}
           ${newData}
       WHERE id = ${itemId}
@@ -390,8 +410,10 @@ export function catchAndRetry<T>(
       const update = await handler(item);
       return update;
     } catch (e) {
+      const error = asError(e);
+
       if (item.attemptCount > maxRetries) {
-        return { status: { value: QueueStatus.Failed } };
+        return { status: { value: QueueStatus.Failed }, error };
       }
 
       const delayMs = baseBackoffMs * backoffFactor ** (item.attemptCount - 1);
@@ -400,6 +422,7 @@ export function catchAndRetry<T>(
           value: QueueStatus.Queued,
           requeueAt: new Date(new Date().getTime() + delayMs),
         },
+        error,
       };
     }
   };

@@ -72,9 +72,7 @@ export type PgQueueItem<T = unknown> = {
   enteredQueueAt: Date;
   attemptCount: number;
   /**
-   * The message of the `error` its last update carried, or null. A column of
-   * text rather than the `Error` an update is given: what the row keeps is what
-   * went wrong, not the object that said so.
+   * The message of the `error` its last update carried, or null
    */
   error: string | null;
 };

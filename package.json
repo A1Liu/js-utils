@@ -5,6 +5,7 @@
   "repository": "https://github.com/A1Liu/js-utils",
   "scripts": {
     "format": "prettier --write .",
+    "lint": "prettier --check .",
     "ts-check": "tsc && tsc -p tsconfig.test.json",
     "build": "tsc",
     "test": "vitest run",
